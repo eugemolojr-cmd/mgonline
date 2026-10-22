@@ -1,0 +1,47 @@
+{
+  "realm": "metroguards",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "HR_ADMIN", "description": "Can manage employees and payslips" },
+      { "name": "EMPLOYEE", "description": "Can view own payslips" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "metroguards-web",
+      "name": "Metroguards React Front-end",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost/*"],
+      "webOrigins": ["http://localhost"],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    }
+  ],
+  "users": [
+    {
+      "username": "hr.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "hr.admin@metroguards.local",
+      "firstName": "Hannah",
+      "lastName": "Reyes",
+      "credentials": [{ "type": "password", "value": "hradmin123", "temporary": false }],
+      "realmRoles": ["HR_ADMIN", "EMPLOYEE"]
+    },
+    {
+      "username": "employee1",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "employee1@metroguards.local",
+      "firstName": "Juan",
+      "lastName": "Dela Cruz",
+      "credentials": [{ "type": "password", "value": "employee123", "temporary": false }],
+      "realmRoles": ["EMPLOYEE"]
+    }
+  ]
+}

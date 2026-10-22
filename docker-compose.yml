@@ -1,0 +1,83 @@
+name: metroguards
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${DB_USER}
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: http://localhost/auth
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Microservice 1: business API (employees, payslip records). Scaled to 2 replicas behind nginx.
+  mgb-payslip:
+    build: ./mgb-payslip
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      DB_USERNAME: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/auth/realms/metroguards/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: http://localhost/auth/realms/metroguards
+    deploy:
+      replicas: 2
+    depends_on:
+      postgres:
+        condition: service_healthy
+  # Microservice 2: payslip retrieval + PDF generation
+  reports:
+    build: ./reports-service
+    environment:
+      BACKEND_BASE_URL: http://mgb-payslip:8080
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/auth/realms/metroguards/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: http://localhost/auth/realms/metroguards
+    deploy:
+      replicas: 2
+    depends_on:
+      - mgb-payslip
+
+  # Microservice 3: React SPA served by nginx
+  mg-payslip:
+    build: ./mg-payslip
+
+  # Edge nginx: load balancer + single entry point
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - mgb-payslip
+      - reports
+      - mg-payslip
+      - keycloak
+
+volumes:
+  pgdata:
